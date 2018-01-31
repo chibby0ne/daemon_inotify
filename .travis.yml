@@ -1,4 +1,4 @@
 language: c
 
 script:
-    - cmake .. && make -j4
+    - cmake . && make -j4
