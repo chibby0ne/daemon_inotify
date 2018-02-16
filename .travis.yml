@@ -1,4 +1,14 @@
-language: c
+language:
+    - c
+sudo:
+    - required
+
+before_install:
+    - sudo apt-get update
+
+install:
+    - sudo apt install doxygen ninja-build
 
 script:
-    - cmake . && make -j4
+    - mkdir build && cd build
+    - cmake .. && ninja -j4 && ninja doc
