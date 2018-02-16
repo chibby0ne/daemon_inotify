@@ -11,4 +11,4 @@ install:
 
 script:
     - mkdir build && cd build
-    - cmake .. && ninja -j4 && ninja doc
+    - cmake .. -GNinja -DBUILDDOC=1 && ninja -j4 && ninja doc
