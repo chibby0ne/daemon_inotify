@@ -30,14 +30,21 @@
 /* Function declarations */
 static void display_inotify_event(struct inotify_event *i, int fd);
 static void make_process_daemon(void);
-static void print_usage(char *binary_name, int fd);
-static char *get_absolute_path(char *path, int fd);
-static void check_if_file_exists(char *path, int fd);
+static void print_usage(char *binary_name);
+static char *get_absolute_path(char *path);
+static int check_if_file_exists(char *path);
 
 /* main function */
 int main(int argc, char *argv[])
 {
+
+    if (argc != 2 || check_if_file_exists(argv[1]) == -1) {
+        print_usage(argv[0]);
+        exit(EXIT_FAILURE);
+    }
+    int backed_stdout = dup(STDERR_FILENO);
     make_process_daemon();
+    printf("Made process a daemon\n");
 
     // open the streams for logs
     int f_stderr, f_stdout;
@@ -50,20 +57,13 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    if (argc != 2) {
-        print_usage(argv[0], f_stderr);
-        exit(EXIT_FAILURE);
-    }
-
-    char *filename_abs = get_absolute_path(argv[1], f_stderr);
-    check_if_file_exists(filename_abs, f_stderr);
-
     int inotify_fd = inotify_init();
     if (inotify_fd == -1) {
         dprintf(f_stderr, "inotify_init: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
 
+    char *filename_abs = get_absolute_path(argv[1]);
     int watch_descriptor = inotify_add_watch(inotify_fd, filename_abs, IN_ALL_EVENTS);
     if (watch_descriptor == -1) {
         dprintf(f_stderr, "inotify_add_watch: %s\n", strerror(errno));
@@ -183,30 +183,32 @@ static void make_process_daemon(void)
     close(STDIN_FILENO);
     close(STDOUT_FILENO);
     close(STDERR_FILENO);
-
 }
 
-static void print_usage(char *binary_name, int fd)
+static void print_usage(char *binary_name)
 {
-    dprintf(fd, "%s FILE\nWhere FILE is a file or a directory", binary_name);
+    fprintf(stderr, "USAGE: %s FILE\nWhere FILE could be either a file or "\
+            "directory\n", binary_name);
 }
 
-static void check_if_file_exists(char *path, int fd)
+static int check_if_file_exists(char *path)
 {
+    char *filename_abs = get_absolute_path(path);
     if (access(path, R_OK) != 0) {
-        dprintf(fd, "access: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
+        fprintf(stderr, "access: %s\n", strerror(errno));
+        return -1;
     }
-    dprintf(fd, "file %s does exist\n", path);
+    fprintf(stderr, "file %s does exist\n", path);
+    return 0;
 }
 
-static char *get_absolute_path(char *path, int fd)
+static char *get_absolute_path(char *path)
 {
    char *full_path = realpath(path, NULL);
    if (full_path == NULL) {
-        dprintf(fd, "realpath %s %s\n", strerror(errno), path);
+        fprintf(stderr, "realpath %s: %s\n", strerror(errno), path);
         exit(EXIT_FAILURE);
     }
-   dprintf(fd, "full_path: %s\n", full_path);
+   fprintf(stderr, "full_path: %s\n", full_path);
    return full_path;
 }
