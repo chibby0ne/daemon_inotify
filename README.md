@@ -11,7 +11,7 @@ Not very useful but I always wanted to use inotify for something...
 ```bash
 mkdir build
 cd build
-cmake .. 
+cmake .. -DBUILDDOC=1
 make
 ```
 
@@ -20,7 +20,7 @@ or if using [ninja](https://ninja-build.org/) (Recommended)
 ```bash
 mkdir build
 cd build
-cmake .. -GNinja
+cmake .. -GNinja -DBUILDDOC=1
 ninja
 ```
 
