@@ -1,5 +1,7 @@
 # Daemon that uses inotify to monitor files/directories
 
+[![Build Status](https://travis-ci.org/chibby0ne/daemon_inotify.svg?branch=master)](https://travis-ci.org/chibby0ne/daemon_inotify)
+
 A daemon that monitors for events in a given file/directory, and informs the
 user of the changes in the log.
 
