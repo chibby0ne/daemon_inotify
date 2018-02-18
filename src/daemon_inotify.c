@@ -14,6 +14,8 @@
 /* You should have received a copy of the GNU General Public License */
 /* along with this program; if not, see <http://www.gnu.org/licenses/>. */
 
+#include "linked_list.h"
+
 #include <sys/inotify.h>
 #include <sys/stat.h>
 #include <limits.h>
@@ -28,23 +30,26 @@
 #define BUF_LEN (10 * (sizeof(struct inotify_event) + NAME_MAX + 1))
 
 /* Function declarations */
-static void display_inotify_event(struct inotify_event *i, int fd);
+static void display_inotify_event(struct inotify_event *i, int fd, struct
+        linked_list *ll);
 static void make_process_daemon(void);
 static void print_usage(char *binary_name);
-static char *get_absolute_path(char *path);
-static int check_if_file_exists(char *path);
+static char *get_absolute_path(char *path, int fd);
+static void check_if_file_readable(char *path, int fd);
+static int check_for_creation_dir(struct linked_list *ll);
+static int check_for_creation_file(struct linked_list *ll);
+
 
 /* main function */
 int main(int argc, char *argv[])
 {
-
-    if (argc != 2 || check_if_file_exists(argv[1]) == -1) {
+    if (argc != 2) {
         print_usage(argv[0]);
         exit(EXIT_FAILURE);
     }
-    int backed_stdout = dup(STDERR_FILENO);
+    char *filename_abs = get_absolute_path(argv[1], STDERR_FILENO);
+    check_if_file_readable(filename_abs, STDERR_FILENO);
     make_process_daemon();
-    printf("Made process a daemon\n");
 
     // open the streams for logs
     int f_stderr, f_stdout;
@@ -63,7 +68,6 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    char *filename_abs = get_absolute_path(argv[1]);
     int watch_descriptor = inotify_add_watch(inotify_fd, filename_abs, IN_ALL_EVENTS);
     if (watch_descriptor == -1) {
         dprintf(f_stderr, "inotify_add_watch: %s\n", strerror(errno));
@@ -72,7 +76,11 @@ int main(int argc, char *argv[])
 
     int bytes_read;
     char buf[BUF_LEN] __attribute__ ((aligned(8)));
+    uint32_t index = 0;
+    struct linked_list *ll = create_linked_list();
     while (1) {
+        dprintf(f_stdout, "While Loop %d\n", index);
+        index++;
         bytes_read = read(inotify_fd, buf, BUF_LEN);
 
         if (bytes_read == -1) {
@@ -86,65 +94,121 @@ int main(int argc, char *argv[])
 
         char *p;
         struct inotify_event *event;
+        uint32_t another_index = 0;
         for (p = buf; p < buf + bytes_read; p += sizeof(struct inotify_event) +
                 event->len) {
+            dprintf(f_stdout, "Event #%d\n", another_index);
+            another_index++;
             event = (struct inotify_event *) p;
-            display_inotify_event(event, f_stdout);
+            display_inotify_event(event, f_stdout, ll);
+        }
+        // Check whether a directory or a file was created
+        int created_dir = 0;
+        if ((created_dir = check_for_creation_dir(ll)) || check_for_creation_file(ll)) {
+            if (created_dir) {
+                dprintf(f_stdout, "Directory created: %s\n", event->name);
+            } else {
+                dprintf(f_stdout, "File created: %s\n", event->name);
+            }
+            delete_linked_list(ll);
+            ll = create_linked_list();
         }
     }
     return 0;
 }
 
-static void display_inotify_event(struct inotify_event *i, int f_stdout)
+static int check_for_creation_dir(struct linked_list *ll)
+{
+    if (ll->size == 2 && ll->front->mask == IN_CREATE && ll->front->next->mask == IN_ISDIR) {
+        return 1;
+    }
+    return 0;
+}
+
+static int check_for_creation_file(struct linked_list *ll)
+{
+    if (ll->size == 4 && ll->front->mask == IN_CREATE && ll->front->next->mask == IN_OPEN &&
+            ll->front->next->next->mask == IN_MODIFY &&
+            ll->front->next->next->next->mask == IN_CLOSE_WRITE) {
+        return 1;
+    }
+    return 0;
+}
+
+static void add_only_different_mask(struct linked_list *ll, uint32_t mask)
+{
+    if (ll->last ==  NULL || ll->last != NULL && ll->last->mask != mask) {
+        insert_node(ll, mask);
+    }
+}
+
+static void display_inotify_event(struct inotify_event *i, int f_stdout, struct
+        linked_list *ll)
 {
     dprintf(f_stdout, "      mask = ");
     if (i->mask & IN_ACCESS) {
         dprintf(f_stdout, "IN_ACCESS ");
+        add_only_different_mask(ll, IN_ACCESS);
     }
     if (i->mask & IN_ATTRIB) {
         dprintf(f_stdout, "IN_ATTRIB ");
+        add_only_different_mask(ll, IN_ATTRIB);
     }
     if (i->mask & IN_CLOSE_NOWRITE) {
         dprintf(f_stdout, "IN_CLOSE_NOWRITE ");
+        add_only_different_mask(ll, IN_CLOSE_NOWRITE);
     }
     if (i->mask & IN_CLOSE_WRITE) {
         dprintf(f_stdout, "IN_CLOSE_WRITE ");
+        add_only_different_mask(ll, IN_CLOSE_WRITE);
     }
     if (i->mask & IN_CREATE) {
         dprintf(f_stdout, "IN_CREATE ");
+        add_only_different_mask(ll, IN_CREATE);
     }
     if (i->mask & IN_DELETE) {
         dprintf(f_stdout, "IN_DELETE ");
+        add_only_different_mask(ll, IN_DELETE);
     }
     if (i->mask & IN_DELETE_SELF) {
         dprintf(f_stdout, "IN_DELETE_SELF ");
+        add_only_different_mask(ll, IN_DELETE_SELF);
     }
     if (i->mask & IN_IGNORED) {
         dprintf(f_stdout, "IN_IGNORED ");
+        add_only_different_mask(ll, IN_IGNORED);
     }
     if (i->mask & IN_ISDIR) {
         dprintf(f_stdout, "IN_ISDIR ");
+        add_only_different_mask(ll, IN_ISDIR);
     }
     if (i->mask & IN_MODIFY) {
         dprintf(f_stdout, "IN_MODIFY ");
+        add_only_different_mask(ll, IN_MODIFY);
     }
     if (i->mask & IN_MOVE_SELF) {
         dprintf(f_stdout, "IN_MOVE_SELF ");
+        add_only_different_mask(ll, IN_MOVE_SELF);
     }
     if (i->mask & IN_MOVED_FROM) {
         dprintf(f_stdout, "IN_MOVED_FROM ");
+        add_only_different_mask(ll, IN_MOVED_FROM);
     }
     if (i->mask & IN_MOVED_TO) {
         dprintf(f_stdout, "IN_MOVED_TO ");
+        add_only_different_mask(ll, IN_MOVED_TO);
     }
     if (i->mask & IN_OPEN) {
         dprintf(f_stdout, "IN_OPEN ");
+        add_only_different_mask(ll, IN_OPEN);
     }
     if (i->mask & IN_Q_OVERFLOW) {
         dprintf(f_stdout, "IN_Q_OVERFLOW ");
+        add_only_different_mask(ll, IN_Q_OVERFLOW);
     }
     if (i->mask & IN_UNMOUNT) {
         dprintf(f_stdout, "IN_UMOUNT ");
+        add_only_different_mask(ll, IN_UNMOUNT);
     }
     dprintf(f_stdout, "\n");
     if (i->len > 0) {
@@ -155,6 +219,7 @@ static void display_inotify_event(struct inotify_event *i, int f_stdout)
 static void make_process_daemon(void)
 {
     // Make an orphan process by forking and killing parent process
+    fprintf(stdout, "Starting process as daemon\n");
     int pid = fork();
     if (pid == -1) {
         perror("fork");
@@ -164,7 +229,7 @@ static void make_process_daemon(void)
         exit(EXIT_SUCCESS);
     }
 
-   // set umask (don't mask anything from file mode flags)
+    // set umask (don't mask anything from file mode flags)
     umask(0);
 
     // create new session ID (make process group leader)
@@ -187,28 +252,25 @@ static void make_process_daemon(void)
 
 static void print_usage(char *binary_name)
 {
-    fprintf(stderr, "USAGE: %s FILE\nWhere FILE could be either a file or "\
-            "directory\n", binary_name);
+    fprintf(stdout, "USAGE: %s FILE\nWhere FILE could be either a file or "\
+            "directory. (File/Directory must to exist)\n", binary_name);
 }
 
-static int check_if_file_exists(char *path)
+static void check_if_file_readable(char *path, int fd)
 {
-    char *filename_abs = get_absolute_path(path);
-    if (access(path, R_OK) != 0) {
-        fprintf(stderr, "access: %s\n", strerror(errno));
-        return -1;
-    }
-    fprintf(stderr, "file %s does exist\n", path);
-    return 0;
-}
-
-static char *get_absolute_path(char *path)
-{
-   char *full_path = realpath(path, NULL);
-   if (full_path == NULL) {
-        fprintf(stderr, "realpath %s: %s\n", strerror(errno), path);
+    char *full_path = get_absolute_path(path, fd);
+    if (access(full_path, R_OK) != 0) {
+        dprintf(fd, "access: %s. File: %s\n", strerror(errno), full_path);
         exit(EXIT_FAILURE);
     }
-   fprintf(stderr, "full_path: %s\n", full_path);
-   return full_path;
+}
+
+static char *get_absolute_path(char *path, int fd)
+{
+    char *full_path = realpath(path, NULL);
+    if (full_path == NULL) {
+        dprintf(fd, "realpath: %s. File: %s\n", strerror(errno), path);
+        exit(EXIT_FAILURE);
+    }
+    return full_path;
 }
