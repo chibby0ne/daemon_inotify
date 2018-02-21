@@ -25,6 +25,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <string.h>
+#include <time.h>
 
 /* Macros */
 #define BUF_LEN (10 * (sizeof(struct inotify_event) + NAME_MAX + 1))
@@ -76,11 +77,8 @@ int main(int argc, char *argv[])
 
     int bytes_read;
     char buf[BUF_LEN] __attribute__ ((aligned(8)));
-    uint32_t index = 0;
     struct linked_list *ll = create_linked_list();
     while (1) {
-        dprintf(f_stdout, "While Loop %d\n", index);
-        index++;
         bytes_read = read(inotify_fd, buf, BUF_LEN);
 
         if (bytes_read == -1) {
@@ -94,21 +92,23 @@ int main(int argc, char *argv[])
 
         char *p;
         struct inotify_event *event;
-        uint32_t another_index = 0;
         for (p = buf; p < buf + bytes_read; p += sizeof(struct inotify_event) +
                 event->len) {
-            dprintf(f_stdout, "Event #%d\n", another_index);
-            another_index++;
             event = (struct inotify_event *) p;
             display_inotify_event(event, f_stdout, ll);
         }
         // Check whether a directory or a file was created
         int created_dir = 0;
         if ((created_dir = check_for_creation_dir(ll)) || check_for_creation_file(ll)) {
+            time_t result = time(NULL);
+            char *time = ctime(&result);
+            // Needed because ctime(), format is "Wed Jun 30 21:49:08 1993\n",
+            // and we print the timestamp in the same line as the action
+            time[strlen(time) - 1] = '\0';
             if (created_dir) {
-                dprintf(f_stdout, "Directory created: %s\n", event->name);
+                dprintf(f_stdout, "[%s] Directory created: %s\n", time, event->name);
             } else {
-                dprintf(f_stdout, "File created: %s\n", event->name);
+                dprintf(f_stdout, "[%s] File created: %s\n", time, event->name);
             }
             delete_linked_list(ll);
             ll = create_linked_list();
@@ -145,74 +145,53 @@ static void add_only_different_mask(struct linked_list *ll, uint32_t mask)
 static void display_inotify_event(struct inotify_event *i, int f_stdout, struct
         linked_list *ll)
 {
-    dprintf(f_stdout, "      mask = ");
     if (i->mask & IN_ACCESS) {
-        dprintf(f_stdout, "IN_ACCESS ");
         add_only_different_mask(ll, IN_ACCESS);
     }
     if (i->mask & IN_ATTRIB) {
-        dprintf(f_stdout, "IN_ATTRIB ");
         add_only_different_mask(ll, IN_ATTRIB);
     }
     if (i->mask & IN_CLOSE_NOWRITE) {
-        dprintf(f_stdout, "IN_CLOSE_NOWRITE ");
         add_only_different_mask(ll, IN_CLOSE_NOWRITE);
     }
     if (i->mask & IN_CLOSE_WRITE) {
-        dprintf(f_stdout, "IN_CLOSE_WRITE ");
         add_only_different_mask(ll, IN_CLOSE_WRITE);
     }
     if (i->mask & IN_CREATE) {
-        dprintf(f_stdout, "IN_CREATE ");
         add_only_different_mask(ll, IN_CREATE);
     }
     if (i->mask & IN_DELETE) {
-        dprintf(f_stdout, "IN_DELETE ");
         add_only_different_mask(ll, IN_DELETE);
     }
     if (i->mask & IN_DELETE_SELF) {
-        dprintf(f_stdout, "IN_DELETE_SELF ");
         add_only_different_mask(ll, IN_DELETE_SELF);
     }
     if (i->mask & IN_IGNORED) {
-        dprintf(f_stdout, "IN_IGNORED ");
         add_only_different_mask(ll, IN_IGNORED);
     }
     if (i->mask & IN_ISDIR) {
-        dprintf(f_stdout, "IN_ISDIR ");
         add_only_different_mask(ll, IN_ISDIR);
     }
     if (i->mask & IN_MODIFY) {
-        dprintf(f_stdout, "IN_MODIFY ");
         add_only_different_mask(ll, IN_MODIFY);
     }
     if (i->mask & IN_MOVE_SELF) {
-        dprintf(f_stdout, "IN_MOVE_SELF ");
         add_only_different_mask(ll, IN_MOVE_SELF);
     }
     if (i->mask & IN_MOVED_FROM) {
-        dprintf(f_stdout, "IN_MOVED_FROM ");
         add_only_different_mask(ll, IN_MOVED_FROM);
     }
     if (i->mask & IN_MOVED_TO) {
-        dprintf(f_stdout, "IN_MOVED_TO ");
         add_only_different_mask(ll, IN_MOVED_TO);
     }
     if (i->mask & IN_OPEN) {
-        dprintf(f_stdout, "IN_OPEN ");
         add_only_different_mask(ll, IN_OPEN);
     }
     if (i->mask & IN_Q_OVERFLOW) {
-        dprintf(f_stdout, "IN_Q_OVERFLOW ");
         add_only_different_mask(ll, IN_Q_OVERFLOW);
     }
     if (i->mask & IN_UNMOUNT) {
-        dprintf(f_stdout, "IN_UMOUNT ");
         add_only_different_mask(ll, IN_UNMOUNT);
-    }
-    dprintf(f_stdout, "\n");
-    if (i->len > 0) {
-        dprintf(f_stdout, "        name = %s\n", i->name);
     }
 }
 
