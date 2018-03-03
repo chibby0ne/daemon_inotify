@@ -51,10 +51,10 @@ Example log:
 
 ## Improvements
 
-- [] Using variable number of arguments
+- [ ] Using variable number of arguments
 - [x] More user friendly log messages
-- [] Add systemd unit
-- [] Add log entries for deletion, modification and rename of file/directories 
+- [ ] Add systemd unit
+- [ ] Add log entries for deletion, modification and rename of file/directories
 
 ## License
 GNU GPLv2
