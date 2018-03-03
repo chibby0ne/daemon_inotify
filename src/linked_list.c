@@ -1,4 +1,8 @@
 #include "linked_list.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <unistd.h>
 
 struct linked_list *create_linked_list()
 {

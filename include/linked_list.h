@@ -2,10 +2,6 @@
 #define LINKED_LIST_H
 
 #include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <unistd.h>
 
 struct node {
     uint32_t mask;
